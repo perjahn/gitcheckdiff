@@ -25,11 +25,11 @@ func captureOutput(f func()) string {
 
 func TestValidateYaml_ValidYaml(t *testing.T) {
 	data := []byte(`name: test
-description: A test repository
+description: testrepo
 owner: myorg`)
 
 	output := captureOutput(func() {
-		errorCount, err := validateYaml(data, []string{"owner"}, []string{"name", "description", "owner"}, "test.yaml")
+		errorCount, err := validateYaml(data, []string{"owner"}, []string{"name", "description", "owner"}, []string{}, []string{}, "test.yaml")
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
 		}
@@ -45,10 +45,10 @@ owner: myorg`)
 
 func TestValidateYaml_MissingRequiredField(t *testing.T) {
 	data := []byte(`name: test
-description: A test repository`)
+description: testrepo`)
 
 	output := captureOutput(func() {
-		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"name", "description", "owner"}, "test.yaml")
+		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"name", "description", "owner"}, []string{}, []string{}, "test.yaml")
 		if errorCount == 0 {
 			t.Errorf("Expected errorCount>0, got %d", errorCount)
 		}
@@ -65,7 +65,7 @@ invalid_field: value
 owner: myorg`)
 
 	output := captureOutput(func() {
-		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"name", "owner"}, "test.yaml")
+		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"name", "owner"}, []string{}, []string{}, "test.yaml")
 		if errorCount == 0 {
 			t.Errorf("Expected errorCount>0, got %d", errorCount)
 		}
@@ -81,7 +81,7 @@ func TestValidateYaml_RequiredFieldOR_FirstAlternative(t *testing.T) {
 owner: myorg`)
 
 	output := captureOutput(func() {
-		errorCount, err := validateYaml(data, []string{"owner|maintainer"}, []string{"name", "owner", "maintainer"}, "test.yaml")
+		errorCount, err := validateYaml(data, []string{"owner|maintainer"}, []string{"name", "owner", "maintainer"}, []string{}, []string{}, "test.yaml")
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
 		}
@@ -100,7 +100,7 @@ func TestValidateYaml_RequiredFieldOR_SecondAlternative(t *testing.T) {
 maintainer: john`)
 
 	output := captureOutput(func() {
-		errorCount, err := validateYaml(data, []string{"owner|maintainer"}, []string{"name", "owner", "maintainer"}, "test.yaml")
+		errorCount, err := validateYaml(data, []string{"owner|maintainer"}, []string{"name", "owner", "maintainer"}, []string{}, []string{}, "test.yaml")
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
 		}
@@ -118,7 +118,7 @@ func TestValidateYaml_RequiredFieldOR_MissingBoth(t *testing.T) {
 	data := []byte(`name: test`)
 
 	output := captureOutput(func() {
-		errorCount, _ := validateYaml(data, []string{"owner|maintainer"}, []string{"name", "owner", "maintainer"}, "test.yaml")
+		errorCount, _ := validateYaml(data, []string{"owner|maintainer"}, []string{"name", "owner", "maintainer"}, []string{}, []string{}, "test.yaml")
 		if errorCount == 0 {
 			t.Errorf("Expected errorCount>0, got %d", errorCount)
 		}
@@ -134,7 +134,7 @@ func TestValidateYaml_ValidFieldGroup_FirstAlternative(t *testing.T) {
 owner: myorg`)
 
 	output := captureOutput(func() {
-		errorCount, err := validateYaml(data, []string{"owner"}, []string{"name|names", "owner"}, "test.yaml")
+		errorCount, err := validateYaml(data, []string{"owner"}, []string{"name|names", "owner"}, []string{}, []string{}, "test.yaml")
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
 		}
@@ -155,7 +155,7 @@ func TestValidateYaml_ValidFieldGroup_SecondAlternative(t *testing.T) {
 owner: myorg`)
 
 	output := captureOutput(func() {
-		errorCount, err := validateYaml(data, []string{"owner"}, []string{"name|names", "owner"}, "test.yaml")
+		errorCount, err := validateYaml(data, []string{"owner"}, []string{"name|names", "owner"}, []string{}, []string{}, "test.yaml")
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
 		}
@@ -176,7 +176,7 @@ names:
 owner: myorg`)
 
 	output := captureOutput(func() {
-		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"name|names", "owner"}, "test.yaml")
+		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"name|names", "owner"}, []string{}, []string{}, "test.yaml")
 		if errorCount == 0 {
 			t.Errorf("Expected errorCount>0, got %d", errorCount)
 		}
@@ -193,7 +193,7 @@ owner: myorg
 maintainer: john`)
 
 	output := captureOutput(func() {
-		errorCount, err := validateYaml(data, []string{"name", "owner"}, []string{"name", "owner", "maintainer"}, "test.yaml")
+		errorCount, err := validateYaml(data, []string{"name", "owner"}, []string{"name", "owner", "maintainer"}, []string{}, []string{}, "test.yaml")
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
 		}
@@ -211,7 +211,7 @@ func TestValidateYaml_InvalidYaml(t *testing.T) {
 	data := []byte(`{invalid yaml: [`)
 
 	output := captureOutput(func() {
-		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"owner"}, "test.yaml")
+		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"owner"}, []string{}, []string{}, "test.yaml")
 		if errorCount == 0 {
 			t.Errorf("Expected errorCount>0, got %d", errorCount)
 		}
@@ -233,6 +233,8 @@ layout: standard`)
 			data,
 			[]string{"owner|maintainer", "name"},
 			[]string{"name|names", "owner", "maintainer", "layout", "description"},
+			[]string{},
+			[]string{},
 			"test.yaml",
 		)
 		if err != nil {
@@ -252,7 +254,7 @@ func TestValidateYaml_EmptyYaml(t *testing.T) {
 	data := []byte(``)
 
 	output := captureOutput(func() {
-		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"owner"}, "test.yaml")
+		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"owner"}, []string{}, []string{}, "test.yaml")
 		if errorCount == 0 {
 			t.Errorf("Expected errorCount>0, got %d", errorCount)
 		}
@@ -278,7 +280,7 @@ owner: myorg`), 0600)
 
 	// Suppress output during test
 	output := captureOutput(func() {
-		_, _ = checkFiles([]string{validFile, invalidFile}, []string{"owner"}, []string{"name", "owner"}, "")
+		_, _ = checkFiles([]string{validFile, invalidFile}, []string{"owner"}, []string{"name", "owner"}, []string{}, []string{}, "")
 	})
 
 	// Just verify the function runs, checking actual stats in next test
@@ -301,17 +303,14 @@ owner: myorg`), 0600)
 	os.WriteFile(invalidFile, []byte(`name: test`), 0600)
 
 	stats, err := captureOutputWithStats(func() (ValidationStats, error) {
-		return checkFiles([]string{validFile, invalidFile}, []string{"owner"}, []string{"name", "owner"}, "")
+		return checkFiles([]string{validFile, invalidFile}, []string{"owner"}, []string{"name", "owner"}, []string{}, []string{}, "")
 	})
 
-	if stats.Total != 2 {
-		t.Errorf("Expected Total=2, got %d", stats.Total)
+	if stats.TotalFiles != 2 {
+		t.Errorf("Expected Total=2, got %d", stats.TotalFiles)
 	}
-	if stats.Valid != 1 {
-		t.Errorf("Expected Valid=1, got %d", stats.Valid)
-	}
-	if stats.Invalid != 1 {
-		t.Errorf("Expected Invalid=1, got %d", stats.Invalid)
+	if stats.InvalidFiles != 1 {
+		t.Errorf("Expected Invalid=1, got %d", stats.InvalidFiles)
 	}
 	if stats.Errors == 0 {
 		t.Errorf("Expected Errors>0, got %d", stats.Errors)
@@ -322,18 +321,18 @@ owner: myorg`), 0600)
 }
 
 func TestValidateYaml_TrailingWhitespace(t *testing.T) {
-	data := []byte(`name: test 
+	data := []byte(`name: test space
 owner: myorg`)
 
 	output := captureOutput(func() {
-		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"name", "owner"}, "test.yaml")
+		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"name", "owner"}, []string{}, []string{}, "test.yaml")
 		if errorCount == 0 {
 			t.Errorf("Expected errorCount>0, got %d", errorCount)
 		}
 	})
 
-	if !bytes.Contains([]byte(output), []byte("trailing whitespace")) {
-		t.Errorf("Expected 'trailing whitespace' error, got: %s", output)
+	if !bytes.Contains([]byte(output), []byte("contains spaces")) {
+		t.Errorf("Expected 'contains spaces' error, got: %s", output)
 	}
 }
 
@@ -342,7 +341,7 @@ func TestValidateYaml_NoTrailingWhitespace(t *testing.T) {
 owner: myorg`)
 
 	output := captureOutput(func() {
-		errorCount, err := validateYaml(data, []string{"owner"}, []string{"name", "owner"}, "test.yaml")
+		errorCount, err := validateYaml(data, []string{"owner"}, []string{"name", "owner"}, []string{}, []string{}, "test.yaml")
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
 		}
@@ -371,4 +370,41 @@ func captureOutputWithStats(f func() (ValidationStats, error)) (ValidationStats,
 	io.Copy(&buf, r)
 
 	return stats, err
+}
+
+func TestValidateYaml_AllLowercaseValues(t *testing.T) {
+	data := []byte(`name: myrepo
+owner: acmeorg
+layout: standard`)
+
+	output := captureOutput(func() {
+		errorCount, err := validateYaml(data, []string{"owner"}, []string{"name", "owner", "layout"}, []string{}, []string{}, "test.yaml")
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+		if errorCount != 0 {
+			t.Errorf("Expected errorCount=0 for all lowercase values, got %d", errorCount)
+		}
+	})
+
+	if bytes.Contains([]byte(output), []byte("uppercase")) {
+		t.Errorf("Expected no uppercase error for lowercase values, got: %s", output)
+	}
+}
+
+func TestValidateYaml_UppercaseFieldValues(t *testing.T) {
+	data := []byte(`name: MyRepo
+owner: AcmeOrg
+layout: standard`)
+
+	output := captureOutput(func() {
+		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"name", "owner", "layout"}, []string{}, []string{}, "test.yaml")
+		if errorCount == 0 {
+			t.Errorf("Expected errorCount>0 for uppercase values, got %d", errorCount)
+		}
+	})
+
+	if !bytes.Contains([]byte(output), []byte("uppercase")) {
+		t.Errorf("Expected 'uppercase' error message, got: %s", output)
+	}
 }

@@ -12,10 +12,9 @@ import (
 )
 
 type ValidationStats struct {
-	Total   int
-	Valid   int
-	Invalid int
-	Errors  int
+	TotalFiles   int
+	InvalidFiles int
+	Errors       int
 }
 
 type FieldInfo struct {
@@ -24,10 +23,17 @@ type FieldInfo struct {
 }
 
 func main() {
-	folder, requiredFields, validFields, pattern, err := parseArguments()
+	folder, requiredFields, validFields, allowUppercaseFields, allowSpaceFields, pattern, err := parseArguments()
 	if err != nil {
 		fmt.Printf("%v\n\n", err)
-		fmt.Println("Usage: gitcheckdiff -folder=<folder> -required=<required fields> -valid=<valid fields> [-pattern=<glob pattern>]")
+		fmt.Println(
+			"Usage: gitcheckdiff" +
+				" -folder=<folder>" +
+				" -required=<fields>" +
+				" -valid=<fields>" +
+				" [-allowUppercase=<fields>]" +
+				" [-allowSpace=<fields>]" +
+				" [-pattern=<glob pattern>]")
 		fmt.Println()
 		flag.PrintDefaults()
 		os.Exit(1)
@@ -43,20 +49,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	stats, err := checkFiles(files, requiredFields, validFields, pattern)
+	stats, err := checkFiles(files, requiredFields, validFields, allowUppercaseFields, allowSpaceFields, pattern)
 	if err != nil {
 		fmt.Printf("Validation of modified files failed: %v\n", err)
 	}
 
 	fmt.Println("Validation Statistics:")
-	fmt.Printf("  Total files:     %d\n", stats.Total)
-	fmt.Printf("  Valid files:     %d\n", stats.Valid)
-	fmt.Printf("  Invalid files:   %d\n", stats.Invalid)
+	fmt.Printf("  Total files:     %d\n", stats.TotalFiles)
+	fmt.Printf("  Valid files:     %d\n", stats.TotalFiles-stats.InvalidFiles)
+	fmt.Printf("  Invalid files:   %d\n", stats.InvalidFiles)
 	fmt.Printf("  Total errors:    %d\n", stats.Errors)
 
 	if err != nil {
 		os.Exit(1)
 	}
+
 	fmt.Println("Done.")
 }
 
@@ -77,24 +84,24 @@ func getFiles(folder string) ([]string, error) {
 	return files, nil
 }
 
-func checkFiles(files, requiredFields, validFields []string, pattern string) (ValidationStats, error) {
-	stats := ValidationStats{Total: 0, Valid: 0, Invalid: 0, Errors: 0}
+func checkFiles(files, requiredFields, validFields, allowUppercaseFields, allowSpaceFields []string, pattern string) (ValidationStats, error) {
+	stats := ValidationStats{TotalFiles: 0, InvalidFiles: 0, Errors: 0}
 
 	for _, filename := range files {
-		stats.Total++
+		stats.TotalFiles++
 
 		if pattern != "" {
 			match, err := filepath.Match(pattern, filepath.Base(filename))
 			if err != nil {
 				fmt.Printf("Error matching pattern '%s' against '%s': %v\n", pattern, filename, err)
 				stats.Errors++
-				stats.Invalid++
+				stats.InvalidFiles++
 				continue
 			}
 			if !match {
 				fmt.Printf("Filename '%s' does not match pattern '%s'\n", filename, pattern)
 				stats.Errors++
-				stats.Invalid++
+				stats.InvalidFiles++
 				continue
 			}
 		}
@@ -107,18 +114,15 @@ func checkFiles(files, requiredFields, validFields []string, pattern string) (Va
 				fmt.Printf("%v\n", err)
 			}
 			stats.Errors++
-			stats.Invalid++
+			stats.InvalidFiles++
 			continue
 		}
 
-		errorCount, err := validateYaml(data, requiredFields, validFields, filename)
+		errorCount, err := validateYaml(data, requiredFields, validFields, allowUppercaseFields, allowSpaceFields, filename)
 		if err != nil {
-			stats.Invalid++
+			stats.InvalidFiles++
 		}
 		stats.Errors += errorCount
-		if errorCount == 0 {
-			stats.Valid++
-		}
 	}
 	if stats.Errors > 0 {
 		return stats, fmt.Errorf("see above errors")
@@ -127,7 +131,7 @@ func checkFiles(files, requiredFields, validFields []string, pattern string) (Va
 	return stats, nil
 }
 
-func validateYaml(data []byte, requiredFields, validFields []string, filename string) (int, error) {
+func validateYaml(data []byte, requiredFields, validFields, allowUppercaseFields, allowSpaceFields []string, filename string) (int, error) {
 	errorCount := checkTrailingWhitespaces(data, filename)
 
 	var node ast.Node
@@ -135,6 +139,8 @@ func validateYaml(data []byte, requiredFields, validFields []string, filename st
 		fmt.Printf("%s: Error parsing file as yaml: %v\n", filename, err)
 		return errorCount + 1, fmt.Errorf("")
 	}
+
+	errorCount += checkFieldValues(node, allowUppercaseFields, allowSpaceFields, filename)
 
 	fields := extractFieldNames(node)
 
@@ -146,6 +152,66 @@ func validateYaml(data []byte, requiredFields, validFields []string, filename st
 	}
 
 	return 0, nil
+}
+
+func checkFieldValues(node ast.Node, allowUppercaseFields, allowSpaceFields []string, filename string) int {
+	errorCount := 0
+
+	allowUppercaseMap := make(map[string]bool)
+	allowSpaceMap := make(map[string]bool)
+	for _, field := range allowUppercaseFields {
+		if field != "" {
+			allowUppercaseMap[field] = true
+		}
+	}
+	for _, field := range allowSpaceFields {
+		if field != "" {
+			allowSpaceMap[field] = true
+		}
+	}
+
+	if node != nil {
+		t := node.GetToken()
+		if t != nil {
+			for {
+				if t.Prev == nil {
+					break
+				} else {
+					t = t.Prev
+				}
+			}
+
+			for {
+				if t.Prev != nil && t.Prev.Value == ":" && t.Value != "" && t.Value != "-" {
+					fieldName := ""
+					if t.Prev.Prev != nil {
+						fieldName = t.Prev.Prev.Value
+					}
+
+					if strings.Contains(t.Value, " ") && !allowSpaceMap[fieldName] {
+						fmt.Printf("%s: Field value '%s' contains spaces at line %d\n", filename, t.Value, t.Position.Line)
+						errorCount++
+					}
+
+					if !allowUppercaseMap[fieldName] {
+						for _, ch := range t.Value {
+							if ch >= 'A' && ch <= 'Z' {
+								fmt.Printf("%s: Field value '%s' contains uppercase letters at line %d\n", filename, t.Value, t.Position.Line)
+								errorCount++
+								break
+							}
+						}
+					}
+				}
+				t = t.Next
+				if t == nil {
+					break
+				}
+			}
+		}
+	}
+
+	return errorCount
 }
 
 func checkTrailingWhitespaces(data []byte, filename string) int {
@@ -262,28 +328,32 @@ func checkValidFields(fields []FieldInfo, validFields []string, filename string)
 	return errorCount
 }
 
-func parseArguments() (string, []string, []string, string, error) {
+func parseArguments() (string, []string, []string, []string, []string, string, error) {
 	folder := flag.String("folder", "", "Location of yaml files")
 	required := flag.String("required", "", "Comma-separated list of required fields in the input yaml")
 	valid := flag.String("valid", "", "Comma-separated list of valid fields in the input yaml")
-	pattern := flag.String("pattern", "", "Glob pattern that files must match (e.g., '*.yaml')")
+	allowUppercase := flag.String("allowUppercase", "", "Comma-separated list of fields whose values can contain uppercase letters")
+	allowSpace := flag.String("allowSpace", "", "Comma-separated list of fields whose values can contain spaces")
+	pattern := flag.String("pattern", "", "Glob pattern that files must match (e.g. '*.yaml')")
 
 	flag.Parse()
 
 	if *folder == "" {
-		return "", nil, nil, "", fmt.Errorf("missing or empty parameter: -folder")
+		return "", nil, nil, nil, nil, "", fmt.Errorf("missing or empty parameter: -folder")
 	}
 	if !isFlagPassed("required") {
-		return "", nil, nil, "", fmt.Errorf("missing or empty parameter: -required")
+		return "", nil, nil, nil, nil, "", fmt.Errorf("missing or empty parameter: -required")
 	}
 	if !isFlagPassed("valid") {
-		return "", nil, nil, "", fmt.Errorf("missing or empty parameter: -valid")
+		return "", nil, nil, nil, nil, "", fmt.Errorf("missing or empty parameter: -valid")
 	}
 
 	requiredFields := strings.Split(*required, ",")
 	validFields := strings.Split(*valid, ",")
+	allowUppercaseFields := strings.Split(*allowUppercase, ",")
+	allowSpaceFields := strings.Split(*allowSpace, ",")
 
-	return *folder, requiredFields, validFields, *pattern, nil
+	return *folder, requiredFields, validFields, allowUppercaseFields, allowSpaceFields, *pattern, nil
 }
 
 func isFlagPassed(name string) bool {
