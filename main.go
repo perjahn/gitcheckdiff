@@ -64,7 +64,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("Done.")
+	fmt.Println("Great Success!")
 }
 
 func getFiles(folder string) ([]string, error) {
@@ -133,6 +133,7 @@ func checkFiles(files, requiredFields, validFields, allowUppercaseFields, allowS
 
 func validateYaml(data []byte, requiredFields, validFields, allowUppercaseFields, allowSpaceFields []string, filename string) (int, error) {
 	errorCount := checkTrailingWhitespaces(data, filename)
+	errorCount += checkConsecutiveNewlines(data, filename)
 
 	var node ast.Node
 	if err := yaml.Unmarshal(data, &node); err != nil {
@@ -182,10 +183,21 @@ func checkFieldValues(node ast.Node, allowUppercaseFields, allowSpaceFields []st
 			}
 
 			for {
-				if t.Prev != nil && t.Prev.Value == ":" && t.Value != "" && t.Value != "-" {
+				if t.Prev != nil && (t.Prev.Value == ":" || t.Prev.Value == "-") && t.Value != "" && t.Value != "-" {
 					fieldName := ""
-					if t.Prev.Prev != nil {
-						fieldName = t.Prev.Prev.Value
+					switch t.Prev.Value {
+					case ":":
+						if t.Prev.Prev != nil {
+							fieldName = t.Prev.Prev.Value
+						}
+					case "-":
+						temp := t.Prev
+						for temp != nil && temp.Value != ":" {
+							temp = temp.Prev
+						}
+						if temp != nil && temp.Prev != nil {
+							fieldName = temp.Prev.Value
+						}
 					}
 
 					if strings.Contains(t.Value, " ") && !allowSpaceMap[fieldName] {
@@ -220,6 +232,18 @@ func checkTrailingWhitespaces(data []byte, filename string) int {
 	for lineNum, line := range lines {
 		if line != strings.TrimRight(line, " \t\r") {
 			fmt.Printf("%s: File has trailing whitespace at line %d: '%s'\n", filename, lineNum+1, line)
+			errorCount++
+		}
+	}
+	return errorCount
+}
+
+func checkConsecutiveNewlines(data []byte, filename string) int {
+	errorCount := 0
+	lines := strings.Split(string(data), "\n")
+	for i := 1; i < len(lines); i++ {
+		if lines[i] == "" && lines[i-1] == "" {
+			fmt.Printf("%s: File has consecutive empty lines at line %d\n", filename, i+1)
 			errorCount++
 		}
 	}

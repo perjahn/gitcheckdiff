@@ -408,3 +408,46 @@ layout: standard`)
 		t.Errorf("Expected 'uppercase' error message, got: %s", output)
 	}
 }
+
+func TestValidateYaml_ArrayElementsUppercase(t *testing.T) {
+	data := []byte(`name: myrepo
+tags:
+  - MyTag
+  - lowercase
+  - AnotherTag
+owner: myorg`)
+
+	output := captureOutput(func() {
+		errorCount, _ := validateYaml(data, []string{"owner"}, []string{"name", "tags", "owner"}, []string{}, []string{}, "test.yaml")
+		if errorCount == 0 {
+			t.Errorf("Expected errorCount>0 for uppercase array elements, got %d", errorCount)
+		}
+	})
+
+	if !bytes.Contains([]byte(output), []byte("uppercase")) {
+		t.Errorf("Expected 'uppercase' error for array elements, got: %s", output)
+	}
+}
+
+func TestValidateYaml_ArrayElementsWithAllowUppercase(t *testing.T) {
+	data := []byte(`name: myrepo
+tags:
+  - MyTag
+  - lowercase
+  - AnotherTag
+owner: myorg`)
+
+	output := captureOutput(func() {
+		errorCount, err := validateYaml(data, []string{"owner"}, []string{"name", "tags", "owner"}, []string{"tags"}, []string{}, "test.yaml")
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+		if errorCount != 0 {
+			t.Errorf("Expected errorCount=0 when tags is in allowUppercase, got %d", errorCount)
+		}
+	})
+
+	if output != "" {
+		t.Errorf("Expected no output when uppercase is allowed for tags, got: %s", output)
+	}
+}
