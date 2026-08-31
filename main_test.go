@@ -207,6 +207,22 @@ maintainer: john`)
 	}
 }
 
+func TestCheckConsecutiveNewlines_DetectsEmptyLinePairs(t *testing.T) {
+	data := []byte("name: test\n\nowner: myorg\n")
+
+	var errorCount int
+	output := captureOutput(func() {
+		errorCount = checkConsecutiveNewlines(data, "test.yaml")
+	})
+
+	if errorCount != 1 {
+		t.Fatalf("Expected 1 consecutive-newline error, got %d", errorCount)
+	}
+	if !bytes.Contains([]byte(output), []byte("consecutive newlines")) {
+		t.Fatalf("Expected consecutive-newline output, got: %s", output)
+	}
+}
+
 func TestValidateYaml_InvalidYaml(t *testing.T) {
 	data := []byte(`{invalid yaml: [`)
 

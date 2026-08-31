@@ -240,11 +240,14 @@ func checkTrailingWhitespaces(data []byte, filename string) int {
 
 func checkConsecutiveNewlines(data []byte, filename string) int {
 	errorCount := 0
-	lines := strings.Split(string(data), "\n")
-	for i := 1; i < len(lines); i++ {
-		if lines[i] == "" && lines[i-1] == "" {
-			fmt.Printf("%s: File has consecutive empty lines at line %d\n", filename, i+1)
+	newlineCount := 1
+	for i := range data {
+		if i > 0 && data[i-1] == '\n' && data[i] == '\n' {
+			fmt.Printf("%s: File has consecutive newlines at line %d\n", filename, newlineCount)
 			errorCount++
+		}
+		if data[i] == '\n' {
+			newlineCount++
 		}
 	}
 	return errorCount
