@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/goccy/go-yaml"
@@ -141,12 +142,15 @@ func validateYaml(data []byte, requiredFields, validFields, allowUppercaseFields
 		return errorCount + 1, fmt.Errorf("")
 	}
 
-	errorCount += checkFieldValues(node, allowUppercaseFields, allowSpaceFields, filename)
-
 	fields := extractFieldNames(node)
 
 	errorCount += checkRequiredFields(fields, requiredFields, filename)
-	errorCount += checkValidFields(fields, validFields, filename)
+	invalidFields := checkValidFields(fields, validFields, filename)
+	errorCount += len(invalidFields)
+
+	errorCount += checkDuplicatedFields(fields, validFields, filename)
+
+	errorCount += checkFieldValues(node, allowUppercaseFields, allowSpaceFields, invalidFields, filename)
 
 	if errorCount > 0 {
 		return errorCount, fmt.Errorf("")
@@ -155,7 +159,7 @@ func validateYaml(data []byte, requiredFields, validFields, allowUppercaseFields
 	return 0, nil
 }
 
-func checkFieldValues(node ast.Node, allowUppercaseFields, allowSpaceFields []string, filename string) int {
+func checkFieldValues(node ast.Node, allowUppercaseFields, allowSpaceFields []string, ignoreFields []FieldInfo, filename string) int {
 	errorCount := 0
 
 	allowUppercaseMap := make(map[string]bool)
@@ -200,12 +204,12 @@ func checkFieldValues(node ast.Node, allowUppercaseFields, allowSpaceFields []st
 						}
 					}
 
-					if strings.Contains(t.Value, " ") && !allowSpaceMap[fieldName] {
+					if strings.Contains(t.Value, " ") && !allowSpaceMap[fieldName] && !slices.Contains(ignoreFields, FieldInfo{Name: fieldName, Line: t.Position.Line}) {
 						fmt.Printf("%s: Field value '%s' contains spaces at line %d\n", filename, t.Value, t.Position.Line)
 						errorCount++
 					}
 
-					if !allowUppercaseMap[fieldName] {
+					if !allowUppercaseMap[fieldName] && !slices.Contains(ignoreFields, FieldInfo{Name: fieldName, Line: t.Position.Line}) {
 						for _, ch := range t.Value {
 							if ch >= 'A' && ch <= 'Z' {
 								fmt.Printf("%s: Field value '%s' contains uppercase letters at line %d\n", filename, t.Value, t.Position.Line)
@@ -316,7 +320,39 @@ func checkRequiredFields(fields []FieldInfo, requiredFields []string, filename s
 	return errorCount
 }
 
-func checkValidFields(fields []FieldInfo, validFields []string, filename string) int {
+func checkValidFields(fields []FieldInfo, validFields []string, filename string) []FieldInfo {
+	var invalidFields []FieldInfo
+
+	type validFieldGroup struct {
+		alternatives []string
+		found        string
+	}
+	var fieldGroups []validFieldGroup
+	fieldToGroupIdx := make(map[string]int)
+
+	for _, field := range validFields {
+		if strings.Contains(field, "|") {
+			alternatives := strings.Split(field, "|")
+			for j := range alternatives {
+				fieldToGroupIdx[alternatives[j]] = len(fieldGroups)
+			}
+			fieldGroups = append(fieldGroups, validFieldGroup{alternatives: alternatives})
+		} else {
+			fieldToGroupIdx[field] = -1
+		}
+	}
+
+	for _, field := range fields {
+		_, isValid := fieldToGroupIdx[field.Name]
+		if !isValid {
+			fmt.Printf("%s: Invalid field name '%s' at line %d\n", filename, field.Name, field.Line)
+			invalidFields = append(invalidFields, field)
+		}
+	}
+	return invalidFields
+}
+
+func checkDuplicatedFields(fields []FieldInfo, validFields []string, filename string) int {
 	errorCount := 0
 
 	type validFieldGroup struct {
@@ -340,10 +376,7 @@ func checkValidFields(fields []FieldInfo, validFields []string, filename string)
 
 	for _, field := range fields {
 		groupIdx, isValid := fieldToGroupIdx[field.Name]
-		if !isValid {
-			fmt.Printf("%s: Invalid field name '%s' at line %d\n", filename, field.Name, field.Line)
-			errorCount++
-		} else if groupIdx >= 0 {
+		if isValid && groupIdx >= 0 {
 			// Field is in a group; check if another alternative already seen
 			if fieldGroups[groupIdx].found != "" && fieldGroups[groupIdx].found != field.Name {
 				fmt.Printf("%s: Field '%s' conflicts with '%s' (only one allowed) at line %d\n", filename, field.Name, fieldGroups[groupIdx].found, field.Line)

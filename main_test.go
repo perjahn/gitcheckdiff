@@ -5,6 +5,9 @@ import (
 	"io"
 	"os"
 	"testing"
+
+	"github.com/goccy/go-yaml"
+	"github.com/goccy/go-yaml/ast"
 )
 
 // captureOutput captures stdout output during function execution
@@ -235,6 +238,87 @@ func TestValidateYaml_InvalidYaml(t *testing.T) {
 
 	if !bytes.Contains([]byte(output), []byte("Error parsing file as yaml")) {
 		t.Errorf("Expected 'Error parsing' message, got: %s", output)
+	}
+}
+
+func TestCheckValidFields_InvalidNameAndGroupConflict(t *testing.T) {
+	fields := []FieldInfo{
+		{Name: "name", Line: 1},
+		{Name: "names", Line: 2},
+		{Name: "invalid_field", Line: 3},
+	}
+
+	output := captureOutput(func() {
+		invalidFields := checkValidFields(fields, []string{"name|names", "owner"}, "test.yaml")
+		if len(invalidFields) != 1 {
+			t.Fatalf("Expected 1 invalid field, got %d", len(invalidFields))
+		}
+	})
+
+	if !bytes.Contains([]byte(output), []byte("Invalid field name 'invalid_field'")) {
+		t.Fatalf("Expected invalid field output, got: %s", output)
+	}
+}
+
+func TestCheckDuplicatedFields_InvalidNameAndGroupConflict(t *testing.T) {
+	fields := []FieldInfo{
+		{Name: "name", Line: 1},
+		{Name: "names", Line: 2},
+		{Name: "invalid_field", Line: 3},
+	}
+
+	output := captureOutput(func() {
+		errorCount := checkDuplicatedFields(fields, []string{"name|names", "owner"}, "test.yaml")
+		if errorCount != 1 {
+			t.Fatalf("Expected 1 duplicated field, got %d", errorCount)
+		}
+	})
+
+	if !bytes.Contains([]byte(output), []byte("conflicts with")) {
+		t.Fatalf("Expected 'conflicts with' error, got: %s", output)
+	}
+}
+
+func TestCheckFieldValues_UppercaseAndWhitespace(t *testing.T) {
+	data := []byte("owner: Acme Org\nrepo: myrepo\n")
+
+	var node ast.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
+		t.Fatalf("yaml.Unmarshal failed: %v", err)
+	}
+
+	output := captureOutput(func() {
+		errorCount := checkFieldValues(node, []string{}, []string{}, []FieldInfo{{Name: "ignored", Line: 1}}, "test.yaml")
+		if errorCount != 2 {
+			t.Fatalf("Expected 2 errors, got %d", errorCount)
+		}
+	})
+
+	if !bytes.Contains([]byte(output), []byte("contains spaces")) {
+		t.Fatalf("Expected spaces error, got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("contains uppercase letters")) {
+		t.Fatalf("Expected uppercase error, got: %s", output)
+	}
+}
+
+func TestCheckFieldValues_IgnoreFields(t *testing.T) {
+	data := []byte("owner: Acme Org\nrepo: myrepo\n")
+
+	var node ast.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
+		t.Fatalf("yaml.Unmarshal failed: %v", err)
+	}
+
+	output := captureOutput(func() {
+		errorCount := checkFieldValues(node, []string{}, []string{}, []FieldInfo{{Name: "owner", Line: 1}}, "test.yaml")
+		if errorCount != 0 {
+			t.Fatalf("Expected no errors, got %d", errorCount)
+		}
+	})
+
+	if output != "" {
+		t.Fatalf("Expected no output, got: %s", output)
 	}
 }
 
