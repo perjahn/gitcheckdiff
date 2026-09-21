@@ -119,8 +119,8 @@ func checkFiles(files, requiredFields, validFields, allowUppercaseFields, allowS
 			continue
 		}
 
-		errorCount, err := validateYaml(data, requiredFields, validFields, allowUppercaseFields, allowSpaceFields, filename)
-		if err != nil {
+		errorCount := validateYaml(data, requiredFields, validFields, allowUppercaseFields, allowSpaceFields, filename)
+		if errorCount > 0 {
 			stats.InvalidFiles++
 		}
 		stats.Errors += errorCount
@@ -132,14 +132,14 @@ func checkFiles(files, requiredFields, validFields, allowUppercaseFields, allowS
 	return stats, nil
 }
 
-func validateYaml(data []byte, requiredFields, validFields, allowUppercaseFields, allowSpaceFields []string, filename string) (int, error) {
+func validateYaml(data []byte, requiredFields, validFields, allowUppercaseFields, allowSpaceFields []string, filename string) int {
 	errorCount := checkTrailingWhitespaces(data, filename)
 	errorCount += checkConsecutiveNewlines(data, filename)
 
 	var node ast.Node
 	if err := yaml.Unmarshal(data, &node); err != nil {
 		fmt.Printf("%s: Error parsing file as yaml: %v\n", filename, err)
-		return errorCount + 1, fmt.Errorf("")
+		return errorCount + 1
 	}
 
 	fields := extractFieldNames(node)
@@ -152,11 +152,7 @@ func validateYaml(data []byte, requiredFields, validFields, allowUppercaseFields
 
 	errorCount += checkFieldValues(node, allowUppercaseFields, allowSpaceFields, invalidFields, filename)
 
-	if errorCount > 0 {
-		return errorCount, fmt.Errorf("")
-	}
-
-	return 0, nil
+	return errorCount
 }
 
 func checkFieldValues(node ast.Node, allowUppercaseFields, allowSpaceFields []string, ignoreFields []FieldInfo, filename string) int {
