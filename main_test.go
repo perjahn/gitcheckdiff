@@ -43,6 +43,27 @@ owner: myorg`)
 	}
 }
 
+func TestValidateYaml_DuplicateListItems(t *testing.T) {
+	data := []byte(`name: test
+read:
+  - repo1
+  - repo2
+  - repo1
+write:
+  - repo1`)
+
+	output := captureOutput(func() {
+		errorCount := validateYaml(data, []string{"name"}, []string{"name", "read", "write"}, []string{}, []string{}, "test.yaml")
+		if errorCount != 1 {
+			t.Errorf("Expected errorCount=1, got %d", errorCount)
+		}
+	})
+
+	if !bytes.Contains([]byte(output), []byte("Duplicate item 'repo1' in list")) {
+		t.Errorf("Expected duplicate list item error, got: %s", output)
+	}
+}
+
 func TestValidateYaml_MissingRequiredField(t *testing.T) {
 	data := []byte(`name: test
 description: testrepo`)

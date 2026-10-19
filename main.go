@@ -144,6 +144,7 @@ func validateYaml(data []byte, requiredFields, validFields, allowUppercaseFields
 
 	fields := extractFieldNames(node)
 
+	errorCount += checkDuplicatedItems(node, filename)
 	errorCount += checkRequiredFields(fields, requiredFields, filename)
 	invalidFields := checkValidFields(fields, validFields, filename)
 	errorCount += len(invalidFields)
@@ -282,6 +283,34 @@ func extractFieldNames(node ast.Node) []FieldInfo {
 	}
 
 	return fields
+}
+
+func checkDuplicatedItems(node ast.Node, filename string) int {
+	errorCount := 0
+
+	switch current := node.(type) {
+	case *ast.DocumentNode:
+		return checkDuplicatedItems(current.Body, filename)
+	case *ast.MappingNode:
+		for _, value := range current.Values {
+			errorCount += checkDuplicatedItems(value.Value, filename)
+		}
+	case *ast.SequenceNode:
+		seen := make(map[string]bool)
+		for _, item := range current.Values {
+			if value, ok := item.(*ast.StringNode); ok {
+				if seen[value.Value] {
+					fmt.Printf("%s: Duplicate item '%s' in list at line %d\n", filename, value.Value, value.GetToken().Position.Line)
+					errorCount++
+				} else {
+					seen[value.Value] = true
+				}
+			}
+			errorCount += checkDuplicatedItems(item, filename)
+		}
+	}
+
+	return errorCount
 }
 
 func checkRequiredFields(fields []FieldInfo, requiredFields []string, filename string) int {
