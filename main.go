@@ -10,6 +10,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/ast"
+	"github.com/goccy/go-yaml/token"
 )
 
 type ValidationStats struct {
@@ -201,12 +202,12 @@ func checkFieldValues(node ast.Node, allowUppercaseFields, allowSpaceFields []st
 						}
 					}
 
-					if strings.Contains(t.Value, " ") && !allowSpaceMap[fieldName] && !slices.Contains(ignoreFields, FieldInfo{Name: fieldName, Line: t.Position.Line}) {
+					if t.Type != token.CommentType && strings.Contains(t.Value, " ") && !allowSpaceMap[fieldName] && !slices.Contains(ignoreFields, FieldInfo{Name: fieldName, Line: t.Position.Line}) {
 						fmt.Printf("%s: Field value '%s' contains spaces at line %d\n", filename, t.Value, t.Position.Line)
 						errorCount++
 					}
 
-					if !allowUppercaseMap[fieldName] && !slices.Contains(ignoreFields, FieldInfo{Name: fieldName, Line: t.Position.Line}) {
+					if t.Type != token.CommentType && !allowUppercaseMap[fieldName] && !slices.Contains(ignoreFields, FieldInfo{Name: fieldName, Line: t.Position.Line}) {
 						for _, ch := range t.Value {
 							if ch >= 'A' && ch <= 'Z' {
 								fmt.Printf("%s: Field value '%s' contains uppercase letters at line %d\n", filename, t.Value, t.Position.Line)
@@ -259,6 +260,7 @@ func extractFieldNames(node ast.Node) []FieldInfo {
 
 	if node != nil {
 		t := node.GetToken()
+
 		for {
 			if t.Prev == nil {
 				break
@@ -268,11 +270,7 @@ func extractFieldNames(node ast.Node) []FieldInfo {
 		}
 
 		for {
-			if (t.Prev == nil && t.Value != "-" && t.Value != ":") ||
-				(t.Value != "-" && t.Value != ":" &&
-					t.Prev != nil && t.Prev.Value != "-" && t.Prev.Value != ":" &&
-					t.Prev.Prev != nil && (t.Prev.Prev.Value == "-" || t.Prev.Prev.Value == ":")) {
-
+			if t.Value != "-" && t.Value != ":" && t.Next != nil && t.Next.Value == ":" && t.Type != token.CommentType {
 				fields = append(fields, FieldInfo{Name: t.Value, Line: t.Position.Line})
 			}
 			t = t.Next

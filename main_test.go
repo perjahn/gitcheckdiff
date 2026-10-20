@@ -43,6 +43,37 @@ owner: myorg`)
 	}
 }
 
+func TestValidateYaml_Comments(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{
+			name: "full-line comment",
+			data: "# FULL LINE COMMENT XYZ\nname: test",
+		},
+		{
+			name: "inline comment",
+			data: "name: test # INLINE COMMENT XYZ",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			output := captureOutput(func() {
+				errorCount := validateYaml([]byte(test.data), []string{"name"}, []string{"name"}, []string{}, []string{}, "test.yaml")
+				if errorCount != 0 {
+					t.Errorf("Expected errorCount=0, got %d", errorCount)
+				}
+			})
+
+			if output != "" {
+				t.Errorf("Expected no output, got: %s", output)
+			}
+		})
+	}
+}
+
 func TestValidateYaml_DuplicateListItems(t *testing.T) {
 	data := []byte(`name: test
 read:
