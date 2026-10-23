@@ -275,6 +275,24 @@ func TestValidateYaml_InvalidYaml(t *testing.T) {
 	}
 }
 
+func TestValidateYaml_DuplicateKeys(t *testing.T) {
+	data := []byte("name: first\nname: second")
+
+	output := captureOutput(func() {
+		errorCount := validateYaml(data, []string{"name"}, []string{"name"}, []string{}, []string{}, "test.yaml")
+		if errorCount == 0 {
+			t.Errorf("Expected duplicate key to cause a validation error")
+		}
+	})
+
+	if !bytes.Contains([]byte(output), []byte("Error parsing file as yaml")) {
+		t.Errorf("Expected yaml parsing error for duplicate key, got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("already defined")) {
+		t.Errorf("Expected duplicate key error, got: %s", output)
+	}
+}
+
 func TestCheckValidFields_InvalidNameAndGroupConflict(t *testing.T) {
 	fields := []FieldInfo{
 		{Name: "name", Line: 1},
@@ -480,6 +498,21 @@ owner: myorg`)
 
 	if output != "" {
 		t.Errorf("Expected no output, got: %s", output)
+	}
+}
+
+func TestValidateYaml_MultipleSpacesBetweenKeyAndValue(t *testing.T) {
+	data := []byte("name:  test\nowner: myorg")
+
+	output := captureOutput(func() {
+		errorCount := validateYaml(data, []string{"owner"}, []string{"name", "owner"}, []string{}, []string{}, "test.yaml")
+		if errorCount != 1 {
+			t.Errorf("Expected errorCount=1, got %d", errorCount)
+		}
+	})
+
+	if !bytes.Contains([]byte(output), []byte("Multiple spaces between key and value at line 1")) {
+		t.Errorf("Expected multiple key-value spaces error, got: %s", output)
 	}
 }
 

@@ -152,6 +152,7 @@ func validateYaml(data []byte, requiredFields, validFields, allowUppercaseFields
 
 	errorCount += checkDuplicatedFields(fields, validFields, filename)
 
+	errorCount += checkKeyValueSpacing(node, filename)
 	errorCount += checkFieldValues(node, allowUppercaseFields, allowSpaceFields, invalidFields, filename)
 
 	return errorCount
@@ -250,6 +251,34 @@ func checkConsecutiveNewlines(data []byte, filename string) int {
 		}
 		if data[i] == '\n' {
 			newlineCount++
+		}
+	}
+	return errorCount
+}
+
+func checkKeyValueSpacing(node ast.Node, filename string) int {
+	if node == nil || node.GetToken() == nil {
+		return 0
+	}
+
+	t := node.GetToken()
+	for t.Prev != nil {
+		t = t.Prev
+	}
+
+	errorCount := 0
+	for ; t != nil; t = t.Next {
+		if t.Value != ":" || t.Position == nil || t.Next == nil || t.Next.Position == nil || t.Next.Type == token.CommentType {
+			continue
+		}
+		if t.Next.Position.Line != t.Position.Line {
+			continue
+		}
+
+		spacing := t.Next.Position.Column - t.Position.Column - len(t.Value)
+		if spacing > 1 {
+			fmt.Printf("%s: Multiple spaces between key and value at line %d\n", filename, t.Position.Line)
+			errorCount++
 		}
 	}
 	return errorCount
